@@ -200,7 +200,7 @@ class DAGScheduler(
     listenerBus.addListener(listener)
   }
 
-  private def getCacheLocs(rdd: RDD[_]): Array[Seq[TaskLocation]] = {
+  private def getCacheLocs(rdd: RDD[_]): Array[Seq[TaskLocation]] = synchronized {
     if (!cacheLocs.contains(rdd.id)) {
       val blockIds = rdd.partitions.indices.map(index=> RDDBlockId(rdd.id, index)).toArray[BlockId]
       val locs = BlockManager.blockIdsToBlockManagers(blockIds, env, blockManagerMaster)
@@ -211,7 +211,7 @@ class DAGScheduler(
     cacheLocs(rdd.id)
   }
 
-  private def clearCacheLocs() {
+  private def clearCacheLocs() = synchronized {
     cacheLocs.clear()
   }
 

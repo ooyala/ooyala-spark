@@ -134,7 +134,7 @@ object SparkBuild extends Build {
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization       := "org.apache.spark",
-    version            := "0.9.1",
+    version            := "ooyala_0.9.1",
     scalaVersion       := "2.10.3",
     scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation",
       "-target:" + SCALAC_JVM_VERSION),
@@ -167,8 +167,19 @@ object SparkBuild extends Build {
     resolvers ++= Seq(Resolver.file("Local Maven Repo", file(Path.userHome + "/.m2/repository"))),
 
     // For Sonatype publishing
-    resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
-      "sonatype-staging" at "https://oss.sonatype.org/service/local/staging/deploy/maven2/"),
+//    resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
+//      "sonatype-staging" at "https://oss.sonatype.org/service/local/staging/deploy/maven2/"),
+
+    resolvers ++= Seq(
+      "Ooyala Nexus" at "http://nexus.ooyala.com/nexus/content/groups/public/",
+      "Cloudera repo" at "https://repository.cloudera.com/artifactory/cloudera-repos/"),
+
+    ivyXML :=
+      <dependencies>
+        <exclude module="jmxri"/>
+        <exclude module="jmxtools"/>
+        <exclude module="jms"/>
+      </dependencies>,
 
     publishMavenStyle := true,
 
@@ -238,14 +249,14 @@ object SparkBuild extends Build {
     watchTransitiveSources <<= Defaults.inDependencies[Task[Seq[File]]](watchSources.task,
       const(std.TaskExtra.constant(Nil)), aggregate = true, includeRoot = true) apply { _.join.map(_.flatten) },
 
-    otherResolvers := Seq(Resolver.file("dotM2", file(Path.userHome + "/.m2/repository"))),
+//    otherResolvers := Seq(Resolver.file("dotM2", file(Path.userHome + "/.m2/repository"))),
     publishLocalConfiguration in MavenCompile <<= (packagedArtifacts, deliverLocal, ivyLoggingLevel) map {
       (arts, _, level) => new PublishConfiguration(None, "dotM2", arts, Seq(), level)
     },
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
-  ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings
+  ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings ++ publishSettings
 
   val slf4jVersion = "1.7.2"
 
@@ -257,10 +268,10 @@ object SparkBuild extends Build {
 
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
-    resolvers ++= Seq(
-       "JBoss Repository"     at "http://repository.jboss.org/nexus/content/repositories/releases/",
-       "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/"
-    ),
+//    resolvers ++= Seq(
+//       "JBoss Repository"     at "http://repository.jboss.org/nexus/content/repositories/releases/",
+//       "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/"
+//    ),
 
     libraryDependencies ++= Seq(
         "com.google.guava"         % "guava"            % "14.0.1",
@@ -453,5 +464,20 @@ object SparkBuild extends Build {
     name := "spark-streaming-mqtt",
     resolvers ++= Seq("Eclipse Repo" at "https://repo.eclipse.org/content/repositories/paho-releases/"),
     libraryDependencies ++= Seq("org.eclipse.paho" % "mqtt-client" % "0.4.0")
+  )
+
+  lazy val publishSettings = Seq(
+    publishMavenStyle := true,
+    // disable publishing the main API jar
+    // publishArtifact in (Compile, packageDoc) := false,
+    credentials += Credentials(Path.userHome / ".ivy2" / ".credentials"),
+    // Write out the current git sha to the maven POM
+    pomExtra := <gitSha>{("git rev-parse HEAD" !!).trim}</gitSha>,
+    publishTo <<= (version) {
+      case version if (version.trim.endsWith("SNAPSHOT")) =>
+        Some("snapshots" at "http://nexus.ooyala.com/nexus/content/repositories/snapshots/")
+      case _ =>
+        Some("releases" at "http://nexus.ooyala.com/nexus/content/repositories/releases/")
+    }
   )
 }
